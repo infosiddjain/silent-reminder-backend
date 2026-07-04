@@ -2,6 +2,7 @@ import express from "express";
 import connectedDB from "./config/db.js";
 import cors from "cors";
 import authRoutes from "./routes/auth/index.js";
+import reminderRoutes from "./routes/reminder/index.js";
 
 const app = express();
 app.use(cors());
@@ -16,6 +17,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api", reminderRoutes);
 
 const startServer = async () => {
   try {
