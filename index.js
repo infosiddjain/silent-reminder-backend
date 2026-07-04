@@ -1,6 +1,7 @@
 import express from "express";
 import connectedDB from "./config/db.js";
 import cors from "cors";
+import authRoutes from "./routes/auth/index.js";
 
 const app = express();
 app.use(cors());
@@ -13,6 +14,8 @@ app.get("/", (req, res) => {
     message: "Hello world",
   });
 });
+
+app.use("/api/auth", authRoutes);
 
 const startServer = async () => {
   try {
