@@ -36,3 +36,25 @@ export const createReminder = async (req, res) => {
     });
   }
 };
+
+export const getReminderList = async (req, res) => {
+  try {
+    const reminder = await REMINDER.find({
+      userId: req.user.id,
+      isDeleted: false,
+    }).sort({ reminderDate: -1 });
+
+    return res.status(200).json({
+      success: true,
+      total: reminder.length,
+      data: reminder,
+      message: "Reminder list fetched successfully.",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      data: null,
+      message: error.message,
+    });
+  }
+};
