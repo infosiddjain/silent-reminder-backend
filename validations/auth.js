@@ -30,3 +30,18 @@ export const registerValidation = (body) => {
   }
   return null;
 };
+
+export const loginValidation = (body) => {
+  const { email, password } = body;
+
+  if (!email) {
+    return "Email address is required";
+  }
+  if (!REGEX.email.test(email)) {
+    return "Add validation valid email address";
+  }
+  if (!password) {
+    return "Password is required";
+  }
+  return null;
+};
