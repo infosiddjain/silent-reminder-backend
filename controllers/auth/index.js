@@ -17,8 +17,12 @@ export const register = async (req, res) => {
 
     const { fullName, email, gender, dob, password } = req.body;
 
-    const user = await USERS.findOne({ email });
-    if (user) {
+    const activeUser = await USERS.findOne({
+      email,
+      isDeleted: false,
+    });
+
+    if (activeUser) {
       return res.status(409).json({
         success: false,
         data: null,
@@ -26,26 +30,35 @@ export const register = async (req, res) => {
       });
     }
 
-    const hashPass = await bcrypt.hash(password, 10);
+    await USERS.deleteMany({
+      email,
+      isDeleted: true,
+    });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await USERS.create({
       fullName,
       email,
       gender,
       dob,
-      password: hashPass,
+      password: hashedPassword,
+      isDeleted: false,
     });
 
-    res.status(201).json({
+    const userData = newUser.toObject();
+    delete userData.password;
+
+    return res.status(201).json({
       success: true,
-      data: newUser,
+      data: userData,
       message: "User registered successfully.",
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       data: null,
-      message: `register api error ${error.message}`,
+      message: error.message,
     });
   }
 };
@@ -64,7 +77,7 @@ export const login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    const user = await USERS.findOne({ email });
+    const user = await USERS.findOne({ email, isDeleted: false });
 
     if (!user) {
       return res.status(404).json({
