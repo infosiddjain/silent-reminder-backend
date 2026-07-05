@@ -92,3 +92,94 @@ export const deleteReminder = async (req, res) => {
     });
   }
 };
+
+export const dashboard = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const now = new Date();
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const [total, upcoming, completed, today, typeCounts] = await Promise.all([
+      REMINDER.countDocuments({
+        userId,
+        isDeleted: false,
+      }),
+
+      REMINDER.countDocuments({
+        userId,
+        isDeleted: false,
+        isCompleted: false,
+        reminderDate: { $gte: now },
+      }),
+
+      REMINDER.countDocuments({
+        userId,
+        isDeleted: false,
+        isCompleted: true,
+      }),
+
+      REMINDER.countDocuments({
+        userId,
+        isDeleted: false,
+        reminderDate: {
+          $gte: startOfToday,
+          $lte: endOfToday,
+        },
+      }),
+
+      REMINDER.aggregate([
+        {
+          $match: {
+            userId: req.user._id,
+            isDeleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: "$type",
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const types = {
+      Event: 0,
+      Birthday: 0,
+      Medicine: 0,
+      Trip: 0,
+      Water: 0,
+      Personal: 0,
+      Business: 0,
+      Food: 0,
+    };
+
+    typeCounts.forEach((item) => {
+      types[item._id] = item.count;
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Dashboard data fetched successfully.",
+      data: {
+        total,
+        upcoming,
+        completed,
+        today,
+        types,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      data: null,
+      message: error.message,
+    });
+  }
+};

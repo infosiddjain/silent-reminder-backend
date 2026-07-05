@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createReminder,
+  dashboard,
   deleteReminder,
   getReminderList,
 } from "../../controllers/reminder/create.js";
@@ -11,4 +12,6 @@ const router = express.Router();
 router.post("/create-reminder", verifyToken, createReminder);
 router.get("/list-reminder", verifyToken, getReminderList);
 router.delete("/delete-reminder/:id", verifyToken, deleteReminder);
+router.get("/dashboard/reminder-count", verifyToken, dashboard);
+
 export default router;
