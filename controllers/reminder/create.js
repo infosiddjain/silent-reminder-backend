@@ -1,5 +1,6 @@
 import REMINDER from "../../models/reminder/index.js";
 import { reminderValidation } from "../../validations/reminder.js";
+import mongoose from "mongoose";
 
 export const createReminder = async (req, res) => {
   try {
@@ -136,7 +137,7 @@ export const dashboard = async (req, res) => {
       REMINDER.aggregate([
         {
           $match: {
-            userId: req.user._id,
+            userId: new mongoose.Types.ObjectId(req.user.id),
             isDeleted: false,
           },
         },
