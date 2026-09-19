@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { REMINDER_TYPES } from "../../constant/regex.js";
 
 const reminderSchema = new mongoose.Schema(
   {
@@ -9,16 +10,7 @@ const reminderSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: [
-        "Event",
-        "Birthday",
-        "Medicine",
-        "Trip",
-        "Water",
-        "Personal",
-        "Business",
-        "Food",
-      ],
+      enum: REMINDER_TYPES,
       required: true,
     },
 
@@ -63,5 +55,8 @@ const reminderSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+// Every query filters by owner + not-deleted and sorts by date.
+reminderSchema.index({ userId: 1, isDeleted: 1, reminderDate: -1 });
 
 export default mongoose.model("Reminder", reminderSchema);

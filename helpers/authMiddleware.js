@@ -1,27 +1,32 @@
 import jwt from "jsonwebtoken";
+import USERS from "../models/users/user.js";
+import { sendError } from "../utils/response.js";
 
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return sendError(res, 401, "Access denied. Token missing.");
+  }
+
+  let decoded;
   try {
-    const authHeader = req.headers.authorization;
+    decoded = jwt.verify(authHeader.split(" ")[1], process.env.JWT_SECRET, {
+      algorithms: ["HS256"],
+    });
+  } catch {
+    return sendError(res, 401, "Invalid or expired token.");
+  }
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Access denied. Token missing.",
-      });
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  try {
+    // A token must stop working once its account is deleted.
+    const exists = await USERS.exists({ _id: decoded.id, isDeleted: false });
+    if (!exists) return sendError(res, 401, "Account no longer exists.");
 
     req.user = decoded;
-
     next();
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token.",
-    });
+    console.error(error);
+    return sendError(res, 500, "Something went wrong. Please try again.");
   }
 };

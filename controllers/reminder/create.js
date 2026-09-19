@@ -1,18 +1,13 @@
+import mongoose from "mongoose";
 import REMINDER from "../../models/reminder/index.js";
 import { reminderValidation } from "../../validations/reminder.js";
-import mongoose from "mongoose";
+import { REMINDER_TYPES } from "../../constant/regex.js";
+import { sendError, serverError } from "../../utils/response.js";
 
 export const createReminder = async (req, res) => {
   try {
     const error = reminderValidation(req.body);
-
-    if (error) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: error,
-      });
-    }
+    if (error) return sendError(res, 400, error);
 
     const { type, title, description, reminderDate } = req.body;
 
@@ -30,11 +25,7 @@ export const createReminder = async (req, res) => {
       message: "Reminder created successfully.",
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      data: null,
-      message: error.message,
-    });
+    return serverError(res, error);
   }
 };
 
@@ -43,7 +34,9 @@ export const getReminderList = async (req, res) => {
     const reminder = await REMINDER.find({
       userId: req.user.id,
       isDeleted: false,
-    }).sort({ reminderDate: -1 });
+    })
+      .sort({ reminderDate: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -52,11 +45,7 @@ export const getReminderList = async (req, res) => {
       message: "Reminder list fetched successfully.",
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      data: null,
-      message: error.message,
-    });
+    return serverError(res, error);
   }
 };
 
@@ -64,21 +53,16 @@ export const deleteReminder = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const reminder = await REMINDER.findOne({
-      _id: id,
-      userId: req.user.id,
-      isDeleted: false,
-    });
-
-    if (!reminder) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: "Reminder not found.",
-      });
+    if (!mongoose.isValidObjectId(id)) {
+      return sendError(res, 400, "Invalid reminder id.");
     }
 
-    ((reminder.isDeleted = true), await reminder.save());
+    const reminder = await REMINDER.findOneAndUpdate(
+      { _id: id, userId: req.user.id, isDeleted: false },
+      { isDeleted: true },
+    );
+
+    if (!reminder) return sendError(res, 404, "Reminder not found.");
 
     return res.status(200).json({
       success: true,
@@ -86,101 +70,80 @@ export const deleteReminder = async (req, res) => {
       message: "Reminder deleted successfully.",
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      data: null,
-      message: error.message,
-    });
+    return serverError(res, error);
   }
 };
 
 export const dashboard = async (req, res) => {
   try {
-    const userId = req.user.id;
-
     const now = new Date();
-
-    const startOfToday = new Date();
+    const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
-
-    const endOfToday = new Date();
+    const endOfToday = new Date(now);
     endOfToday.setHours(23, 59, 59, 999);
 
-    const [total, upcoming, completed, today, typeCounts] = await Promise.all([
-      REMINDER.countDocuments({
-        userId,
-        isDeleted: false,
-      }),
-
-      REMINDER.countDocuments({
-        userId,
-        isDeleted: false,
-        isCompleted: false,
-        reminderDate: { $gte: now },
-      }),
-
-      REMINDER.countDocuments({
-        userId,
-        isDeleted: false,
-        isCompleted: true,
-      }),
-
-      REMINDER.countDocuments({
-        userId,
-        isDeleted: false,
-        reminderDate: {
-          $gte: startOfToday,
-          $lte: endOfToday,
+    // One pass over the user's reminders instead of five separate queries.
+    const rows = await REMINDER.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(req.user.id),
+          isDeleted: false,
         },
-      }),
-
-      REMINDER.aggregate([
-        {
-          $match: {
-            userId: new mongoose.Types.ObjectId(req.user.id),
-            isDeleted: false,
+      },
+      {
+        $group: {
+          _id: "$type",
+          total: { $sum: 1 },
+          completed: { $sum: { $cond: ["$isCompleted", 1, 0] } },
+          upcoming: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$isCompleted", false] },
+                    { $gte: ["$reminderDate", now] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          today: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $gte: ["$reminderDate", startOfToday] },
+                    { $lte: ["$reminderDate", endOfToday] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
           },
         },
-        {
-          $group: {
-            _id: "$type",
-            count: { $sum: 1 },
-          },
-        },
-      ]),
+      },
     ]);
 
-    const types = {
-      Event: 0,
-      Birthday: 0,
-      Medicine: 0,
-      Trip: 0,
-      Water: 0,
-      Personal: 0,
-      Business: 0,
-      Food: 0,
-    };
+    const types = Object.fromEntries(REMINDER_TYPES.map((t) => [t, 0]));
+    const data = { total: 0, upcoming: 0, completed: 0, today: 0, types };
 
-    typeCounts.forEach((item) => {
-      types[item._id] = item.count;
-    });
+    for (const row of rows) {
+      types[row._id] = row.total;
+      data.total += row.total;
+      data.upcoming += row.upcoming;
+      data.completed += row.completed;
+      data.today += row.today;
+    }
 
     return res.status(200).json({
       success: true,
       message: "Dashboard data fetched successfully.",
-      data: {
-        total,
-        upcoming,
-        completed,
-        today,
-        types,
-      },
+      data,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      data: null,
-      message: error.message,
-    });
+    return serverError(res, error);
   }
 };
